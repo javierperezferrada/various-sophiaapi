@@ -1,0 +1,130 @@
+curl -XGET 'localhost:9202/test/_search' -d '{"query":{"bool":{"must":[{"match":{"content":"contenido"}}]}}}'
+
+curl -XGET 'localhost:9202/test/_search' -d '{"query":{"bool":{"must":[{"match":{"content":"contenido"}},
+								       {"match":{"content":"soy"}}]}}}'
+
+#lo que hace actualmente el search and
+curl -XGET 'localhost:9202/test/_search' -d '{"query":{"bool":{"must":[{"match":{"content":"contenido"}},
+									{"match":{"title":"contenido"}},
+									{"match":{"content":"contenido"}},
+								       {"match":{"content":"soy"}}]}}}'
+
+#lo que debemos hacer con el and y varios campos
+curl -XGET 'localhost:9202/articles/_search' -d '
+{"query":{"filtered":{
+	"query":{
+		"match_all":{}
+		}
+	}
+}
+}'
+
+#"aggs":{
+					"articlesByPressMedia":{
+							"terms":{"field":"art_name_press_source","size":1000},
+							"aggs":{
+									"repeated":{"sum":{"field":"art_repeated"}}
+							}
+							}
+					}
+
+#countby art_name_press_source repeated
+curl -XGET 'localhost:9202/articles/_search' -d '
+{"query":{"filtered":{
+	"query":{
+		"match_all":{}
+		}
+	}
+},
+"aggs":{
+					"articlesByPressMedia":{
+							"terms":{"field":"art_name_press_source","size":1000},
+							"aggs":{
+									"repeated":{"sum":{"field":"art_repeated"}}
+							}
+							}
+					}
+}'
+
+#sin repetidos
+curl -XGET 'localhost:9202/articles/_search' -d '
+{"query":{"filtered":{
+	"query":{
+		"match_all":{}
+		}
+	}
+},
+"aggs":{
+					"articlesByPressMedia":{
+							"terms":{"field":"art_name_press_source","size":1000}
+							}
+					}
+}'
+
+#con histograma mas por medios
+curl -XGET 'localhost:9202/articles/_search' -d '
+{
+	"query":
+	{
+		"filtered":{
+			"query":{
+				"bool":{"must":[{
+					"range": {
+						"art_date": {
+						"from": "2017-01-31 08:00:00" ,
+						"to":  "2017-02-01 10:59:59"
+					}}}]
+				}
+			}
+		}
+	},
+	"aggs":
+	{
+		"result_over_time" : {
+			"date_histogram" : {
+				"field" : "art_date",
+				"interval" : "hour" ,
+				"min_doc_count": 0 ,
+				"format" : "yyyy-MM-dd HH:mm:ss",
+				"extended_bounds":{
+					"min": "2017-01-31 08:00:00",
+					"max": "2017-02-01 10:59:59"
+				}
+			},
+			"aggs":{
+								"articlesByPressMedia":{
+										"terms":{"field":"art_name_press_source","size":1000}
+										}
+								},
+								"stats_articles_by_pm": {
+									"stats_bucket": {
+											"buckets_paths": "result_over_time>articlesByPressMedia"
+									}
+								}
+		}
+	}
+}'
+
+
+{
+    "aggs" : {
+        "sales_per_month" : {
+            "date_histogram" : {
+                "field" : "date",
+                "interval" : "month"
+            },
+            "aggs": {
+                "sales": {
+                    "sum": {
+                        "field": "price"
+                    }
+                }
+            }
+        },
+        "stats_monthly_sales": {
+            "stats_bucket": {
+                "buckets_paths": "sales_per_month>sales"
+            }
+        }
+    }
+}
